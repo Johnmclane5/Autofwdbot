@@ -4,29 +4,6 @@ This Cloudflare worker forwards messages from a Telegram bot to a specific chat 
 
 ## Deployment
 
-There are two ways to deploy this worker: using the Wrangler CLI or the Cloudflare dashboard.
-
-### Using the Wrangler CLI (Recommended for Developers)
-
-1.  **Clone the repository.**
-2.  **Install the Wrangler CLI:**
-    ```bash
-    npm install -g @cloudflare/wrangler
-    ```
-3.  **Configure `wrangler.toml`:**
-    -   Copy `wrangler.toml.example` to `wrangler.toml`.
-4.  **Add Your Secrets:**
-    -   `TELEGRAM_BOT_TOKEN`: Your Telegram bot token.
-    -   `DESTINATION_CHAT_ID`: The ID of the chat where messages should be forwarded.
-    ```bash
-    wrangler secret put TELEGRAM_BOT_TOKEN
-    wrangler secret put DESTINATION_CHAT_ID
-    ```
-5.  **Deploy the Worker:**
-    ```bash
-    wrangler deploy
-    ```
-
 ### Using the Cloudflare Dashboard
 
 1.  **Log in to Cloudflare:** Go to your Cloudflare dashboard.
