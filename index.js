@@ -25,6 +25,21 @@ async function handleMessage(message) {
 
   const TELEGRAM_API_URL = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}`;
 
+  // Handle the /start command
+  if (message.text && message.text === '/start') {
+    await fetch(`${TELEGRAM_API_URL}/sendMessage`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: 'Welcome! You can send me any message, and I will forward it to the support team. They will reply to you through this chat.',
+      }),
+    });
+    return;
+  }
+
   // If the message is a reply in the destination chat, handle it as a reply.
   if (
     chatId.toString() === DESTINATION_CHAT_ID.toString() &&
