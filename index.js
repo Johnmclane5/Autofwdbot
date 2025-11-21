@@ -3,9 +3,14 @@
 // Environment variables are automatically available in the global scope:
 // TELEGRAM_BOT_TOKEN
 // DESTINATION_CHAT_ID
+// TELEGRAM_KV
 
 addEventListener('fetch', event => {
   event.respondWith(handleRequest(event));
+});
+
+addEventListener('scheduled', event => {
+  event.waitUntil(handleScheduled(event));
 });
 
 async function handleRequest(event) {
@@ -25,7 +30,7 @@ async function handleMessage(message) {
 
   const TELEGRAM_API_URL = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}`;
 
-  // Handle the /start command
+  // Handle the /start command immediately
   if (message.text && message.text === '/start') {
     await fetch(`${TELEGRAM_API_URL}/sendMessage`, {
       method: 'POST',
@@ -39,6 +44,34 @@ async function handleMessage(message) {
     });
     return;
   }
+
+  // For all other messages, add them to the queue
+  const timestamp = new Date().toISOString();
+  const key = `message_${timestamp}_${messageId}`;
+  await TELEGRAM_KV.put(key, JSON.stringify(message));
+}
+
+async function handleScheduled(event) {
+  const { keys } = await TELEGRAM_KV.list();
+
+  // Sort keys chronologically
+  keys.sort((a, b) => a.name.localeCompare(b.name));
+
+  for (const key of keys) {
+    const message = await TELEGRAM_KV.get(key.name, { type: 'json' });
+    if (message) {
+      await processAndForwardMessage(message, TELEGRAM_BOT_TOKEN, DESTINATION_CHAT_ID);
+      await TELEGRAM_KV.delete(key.name);
+      await new Promise(resolve => setTimeout(resolve, 3000)); // 3-second delay
+    }
+  }
+}
+
+async function processAndForwardMessage(message, TELEGRAM_BOT_TOKEN, DESTINATION_CHAT_ID) {
+  const chatId = message.chat.id;
+  const messageId = message.message_id;
+
+  const TELEGRAM_API_URL = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}`;
 
   // If the message is a reply in the destination chat, handle it as a reply.
   if (

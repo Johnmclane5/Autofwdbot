@@ -16,12 +16,21 @@ This Cloudflare worker forwards messages from a Telegram bot to a specific chat 
     -   Copy the full content of the `index.js` file from this repository.
     -   Paste it into the editor, replacing the default code.
     -   Click "Save and Deploy."
-5.  **Add Your Secrets:**
+5.  **Create a KV Namespace:**
+    -   In the sidebar, navigate to **Workers & Pages > KV**.
+    -   Click "Create a namespace" and give it a name, for example, `TELEGRAM_KV`.
+6.  **Add Your Secrets and Bind the KV Namespace:**
     -   Go to your worker's **Settings > Variables** tab.
     -   Under "Environment Variables," add two variables:
         -   `TELEGRAM_BOT_TOKEN`: Your Telegram bot token.
         -   `DESTINATION_CHAT_ID`: The ID of the chat where messages will be forwarded.
-    -   Click the "Encrypt" button for both variables to keep them secure. Save your changes.
+    -   Click the "Encrypt" button for both variables to keep them secure.
+    -   Under "KV Namespace Bindings," click "Add binding."
+    -   Set the "Variable name" to `TELEGRAM_KV` and select the KV namespace you created. Save your changes.
+7.  **Set Up a Cron Trigger:**
+    -   Go to your worker's **Settings > Triggers** tab.
+    -   Under "Cron Triggers," click "Add Cron Trigger."
+    -   Enter `* * * * *` to run the worker every minute. Save your changes.
 
 
 ## Setting Up the Telegram Webhook
@@ -35,6 +44,7 @@ After deploying, you will have a URL for your worker (e.g., `https://telegram-bo
 
 ## How It Works
 
--   When a user sends a message to the bot, it's forwarded to the `DESTINATION_CHAT_ID`.
+-   When a user sends a message to the bot, it's added to a queue in a Cloudflare KV namespace.
+-   A Cron Trigger runs the worker every minute to process the queue, sending messages to the `DESTINATION_CHAT_ID` with a 3-second delay between each message.
 -   A hidden identifier is added to the forwarded message to link it to the original user.
 -   When you reply to a forwarded message, the bot sends your reply to the original user.
