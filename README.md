@@ -23,7 +23,7 @@ This Cloudflare worker forwards messages from a Telegram bot to a specific chat 
     -   Go to your worker's **Settings > Variables** tab.
     -   Under "Environment Variables," add two variables:
         -   `TELEGRAM_BOT_TOKEN`: Your Telegram bot token.
-        -   `DESTINATION_CHAT_ID`: The ID of the chat where messages will be forwarded.
+        -   `ADMIN_CHAT_ID`: The ID of the chat for the bot administrator.
     -   Click the "Encrypt" button for both variables to keep them secure.
     -   Under "KV Namespace Bindings," click "Add binding."
     -   Set the "Variable name" to `TELEGRAM_KV` and select the KV namespace you created. Save your changes.
@@ -41,10 +41,19 @@ After deploying, you will have a URL for your worker (e.g., `https://telegram-bo
     `https://api.telegram.org/bot<YOUR_BOT_TOKEN>/setWebhook?url=<YOUR_WORKER_URL>`
 2.  Paste this URL into your browser and press Enter. You should see a success message from Telegram.
 
+## Configuration
+
+### Setting the Destination Chat
+
+To set the destination chat where messages will be forwarded, the admin must send the following command to the bot:
+
+`/set_destination <chat_id>`
+
+Replace `<chat_id>` with the target chat ID. This command can only be sent from the `ADMIN_CHAT_ID`.
 
 ## How It Works
 
 -   When a user sends a message to the bot, it's added to a queue in a Cloudflare KV namespace.
--   A Cron Trigger runs the worker every minute to process the queue, sending messages to the `DESTINATION_CHAT_ID` with a 3-second delay between each message.
+-   A Cron Trigger runs the worker every minute to process the queue, sending messages to the destination chat with a 3-second delay between each message.
 -   A hidden identifier is added to the forwarded message to link it to the original user.
 -   When you reply to a forwarded message, the bot sends your reply to the original user.

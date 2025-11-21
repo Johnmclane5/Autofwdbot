@@ -2,7 +2,7 @@
 
 // Environment variables are automatically available in the global scope:
 // TELEGRAM_BOT_TOKEN
-// DESTINATION_CHAT_ID
+// ADMIN_CHAT_ID
 // TELEGRAM_KV
 
 addEventListener('fetch', event => {
@@ -45,6 +45,41 @@ async function handleMessage(message) {
     return;
   }
 
+  // Handle the /set_destination command
+  if (message.text && message.text.startsWith('/set_destination')) {
+    if (chatId.toString() !== ADMIN_CHAT_ID.toString()) {
+      return; // Ignore if not from admin
+    }
+
+    const parts = message.text.split(' ');
+    if (parts.length === 2) {
+      const newDestination = parts[1];
+      await TELEGRAM_KV.put('DESTINATION_CHAT_ID', newDestination);
+      await fetch(`${TELEGRAM_API_URL}/sendMessage`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text: `Destination chat ID set to ${newDestination}`,
+        }),
+      });
+    } else {
+      await fetch(`${TELEGRAM_API_URL}/sendMessage`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text: 'Usage: /set_destination <chat_id>',
+        }),
+      });
+    }
+    return;
+  }
+
   // For all other messages, add them to the queue
   const timestamp = new Date().toISOString();
   const key = `message_${timestamp}_${messageId}`;
@@ -52,12 +87,19 @@ async function handleMessage(message) {
 }
 
 async function handleScheduled(event) {
-  const { keys } = await TELEGRAM_KV.list();
+  const DESTINATION_CHAT_ID = await TELEGRAM_KV.get('DESTINATION_CHAT_ID');
+  if (!DESTINATION_CHAT_ID) {
+    return; // No destination set
+  }
+
+  const { keys } = await TELEGRAM_KV.list({ prefix: 'message_' });
 
   // Sort keys chronologically
   keys.sort((a, b) => a.name.localeCompare(b.name));
 
-  for (const key of keys) {
+  const batch = keys.slice(0, 20);
+
+  for (const key of batch) {
     const message = await TELEGRAM_KV.get(key.name, { type: 'json' });
     if (message) {
       await processAndForwardMessage(message, TELEGRAM_BOT_TOKEN, DESTINATION_CHAT_ID);
