@@ -47,13 +47,16 @@ After deploying, you will have a URL for your worker (e.g., `https://telegram-bo
 
 To set the destination chat where messages will be forwarded, the admin must send the following command to the bot:
 
-`/set_destination <chat_id>`
+`/set <chat_id>`
 
 Replace `<chat_id>` with the target chat ID. This command can only be sent from the `ADMIN_CHAT_ID`.
 
 ## How It Works
 
--   When a user sends a message to the bot, it's added to a queue in a Cloudflare KV namespace.
+-   When a user sends a message to the bot, a minimal version of it is added to a queue in a Cloudflare KV namespace.
 -   A Cron Trigger runs the worker every minute to process the queue, sending messages to the destination chat with a 3-second delay between each message.
--   A hidden identifier is added to the forwarded message to link it to the original user.
+-   All messages are forwarded using Telegram's `copyMessage` API call.
+-   For text messages, a hidden identifier is added to the caption to enable replies.
+-   For all other messages (e.g., images, documents), the caption is omitted to preserve the original caption and its formatting. This means that **reply functionality is not available for non-text messages**.
+-   The "From: @username" prefix is no longer added to text messages.
 -   When you reply to a forwarded message, the bot sends your reply to the original user.

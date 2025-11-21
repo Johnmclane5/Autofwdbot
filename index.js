@@ -45,8 +45,8 @@ async function handleMessage(message) {
     return;
   }
 
-  // Handle the /set_destination command
-  if (message.text && message.text.startsWith('/set_destination')) {
+  // Handle the /set command
+  if (message.text && message.text.startsWith('/set')) {
     if (chatId.toString() !== ADMIN_CHAT_ID.toString()) {
       return; // Ignore if not from admin
     }
@@ -73,17 +73,38 @@ async function handleMessage(message) {
         },
         body: JSON.stringify({
           chat_id: chatId,
-          text: 'Usage: /set_destination <chat_id>',
+          text: 'Usage: /set <chat_id>',
         }),
       });
     }
     return;
   }
 
-  // For all other messages, add them to the queue
+  const DESTINATION_CHAT_ID = await TELEGRAM_KV.get('DESTINATION_CHAT_ID');
+
+  // If the message is a reply in the destination chat, handle it as a reply immediately
+  if (
+    DESTINATION_CHAT_ID &&
+    chatId.toString() === DESTINATION_CHAT_ID.toString() &&
+    message.reply_to_message
+  ) {
+    await handleReplyMessage(message, TELEGRAM_BOT_TOKEN);
+    return;
+  }
+
+  // Prevent the bot from forwarding messages from the destination chat.
+  if (DESTINATION_CHAT_ID && chatId.toString() === DESTINATION_CHAT_ID.toString()) {
+    return;
+  }
+
+  // For all other messages, add them to the queue with minimal data
   const timestamp = new Date().toISOString();
   const key = `message_${timestamp}_${messageId}`;
-  await TELEGRAM_KV.put(key, JSON.stringify(message));
+  await TELEGRAM_KV.put(key, JSON.stringify({
+    from_chat_id: chatId,
+    message_id: messageId,
+    is_text: !!message.text
+  }));
 }
 
 async function handleScheduled(event) {
@@ -109,17 +130,11 @@ async function handleScheduled(event) {
   }
 }
 
-async function processAndForwardMessage(message, TELEGRAM_BOT_TOKEN, DESTINATION_CHAT_ID) {
-  const chatId = message.chat.id;
-  const messageId = message.message_id;
+async function handleReplyMessage(message, TELEGRAM_BOT_TOKEN) {
+    const chatId = message.chat.id;
+    const messageId = message.message_id;
+    const TELEGRAM_API_URL = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}`;
 
-  const TELEGRAM_API_URL = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}`;
-
-  // If the message is a reply in the destination chat, handle it as a reply.
-  if (
-    chatId.toString() === DESTINATION_CHAT_ID.toString() &&
-    message.reply_to_message
-  ) {
     const repliedTo = message.reply_to_message;
     const text = repliedTo.text || repliedTo.caption || '';
     const match = text.match(/\u200b(.+)/);
@@ -161,65 +176,47 @@ async function processAndForwardMessage(message, TELEGRAM_BOT_TOKEN, DESTINATION
         });
       }
     }
-    return;
-  }
+}
 
-  // Prevent the bot from forwarding messages from the destination chat.
-  if (chatId.toString() === DESTINATION_CHAT_ID.toString()) {
-    return;
-  }
+async function processAndForwardMessage(queuedMessage, TELEGRAM_BOT_TOKEN, DESTINATION_CHAT_ID) {
+  const TELEGRAM_API_URL = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}`;
 
   const identifier = `\u200b${JSON.stringify({
-    chat_id: chatId,
-    message_id: messageId,
+    chat_id: queuedMessage.from_chat_id,
+    message_id: queuedMessage.message_id,
   })}`;
 
-  try {
-    if (message.text) {
-      const fromUser = message.from;
-      const senderInfo = fromUser.username
-        ? `@${fromUser.username}`
-        : `${fromUser.first_name} ${fromUser.last_name || ''}`.trim();
+  const body = {
+      chat_id: DESTINATION_CHAT_ID,
+      from_chat_id: queuedMessage.from_chat_id,
+      message_id: queuedMessage.message_id,
+  };
 
-      const response = await fetch(`${TELEGRAM_API_URL}/sendMessage`, {
+  // For text messages, we add the identifier as a caption to enable replies.
+  // For all other messages, we omit the caption entirely to preserve the original.
+  if (queuedMessage.is_text) {
+      body.caption = identifier;
+  }
+
+  try {
+    const response = await fetch(`${TELEGRAM_API_URL}/copyMessage`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chat_id: DESTINATION_CHAT_ID,
-          text: `From: ${senderInfo}\n\n${message.text}\n${identifier}`,
-        }),
+        body: JSON.stringify(body),
       });
       const result = await response.json();
       if (!result.ok) {
         throw new Error(`Telegram API error: ${result.description}`);
       }
-    } else {
-      const response = await fetch(`${TELEGRAM_API_URL}/copyMessage`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chat_id: DESTINATION_CHAT_ID,
-          from_chat_id: chatId,
-          message_id: messageId,
-          caption: message.caption
-            ? `${message.caption}\n${identifier}`
-            : identifier,
-        }),
-      });
-      const result = await response.json();
-      if (!result.ok) {
-        throw new Error(`Telegram API error: ${result.description}`);
-      }
-    }
   } catch (error) {
     console.error(error);
     await fetch(`${TELEGRAM_API_URL}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        chat_id: chatId,
+        chat_id: queuedMessage.from_chat_id,
         text: 'Sorry, your message could not be forwarded. Please try again later.',
-        reply_to_message_id: messageId,
+        reply_to_message_id: queuedMessage.message_id,
       }),
     });
   }
