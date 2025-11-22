@@ -180,6 +180,13 @@ async function handleReplyMessage(message, TELEGRAM_BOT_TOKEN) {
 
 async function processAndForwardMessage(queuedMessage, TELEGRAM_BOT_TOKEN, DESTINATION_CHAT_ID) {
   const TELEGRAM_API_URL = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}`;
+  const processedKey = `processed_${queuedMessage.from_chat_id}_${queuedMessage.message_id}`;
+
+  const alreadyProcessed = await TELEGRAM_KV.get(processedKey);
+  if (alreadyProcessed) {
+    console.log(`Skipping already processed message: ${processedKey}`);
+    return;
+  }
 
   const identifier = `\u200b${JSON.stringify({
     chat_id: queuedMessage.from_chat_id,
@@ -208,6 +215,7 @@ async function processAndForwardMessage(queuedMessage, TELEGRAM_BOT_TOKEN, DESTI
       if (!result.ok) {
         throw new Error(`Telegram API error: ${result.description}`);
       }
+      await TELEGRAM_KV.put(processedKey, 'true', { expirationTtl: 86400 });
   } catch (error) {
     console.error(error);
     await fetch(`${TELEGRAM_API_URL}/sendMessage`, {
